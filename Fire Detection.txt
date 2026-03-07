@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fire Detection Alert System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    /* ── CSS Variables & Reset ─────────────────────────────────── */
+    :root {
+      --bg:        #0a0c10;
+      --surface:   #111318;
+      --card:      #161b22;
+      --border:    #22293a;
+      --safe:      #00e676;
+      --safe-glow: rgba(0,230,118,0.18);
+      --fire:      #ff3d00;
+      --fire-glow: rgba(255,61,0,0.25);
+      --orange:    #ff9100;
+      --text:      #d0d8e8;
+      --muted:     #5a6480;
+      --radius:    16px;
+      --mono:      'Share Tech Mono', monospace;
+      --head:      'Rajdhani', sans-serif;
+      --transition: 0.4s cubic-bezier(.4,0,.2,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--head);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+      /* subtle grid texture */
+      background-image:
+        linear-gradient(rgba(255,61,0,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,61,0,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* ── Flash animation (fire detected) ───────────────────────── */
+    @keyframes bodyFlash {
+      0%,100% { background-color: var(--bg); }
+      50%      { background-color: #1a0600; }
+    }
+    body.alarm-active {
+      animation: bodyFlash 0.8s ease-in-out infinite;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 28px;
+      max-width: 700px;
+      width: 100%;
+    }
+    .logo-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 6px;
+    }
+    .flame-icon {
+      font-size: 2.4rem;
+      filter: drop-shadow(0 0 12px var(--fire));
+      animation: flicker 1.8s ease-in-out infinite;
+    }
+    @keyframes flicker {
+      0%,100% { transform: scale(1) rotate(-2deg); opacity:1; }
+      50%      { transform: scale(1.12) rotate(2deg); opacity:.85; }
+    }
+    h1 {
+      font-size: clamp(1.6rem, 5vw, 2.6rem);
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      background: linear-gradient(90deg, var(--fire), var(--orange), #ffcc00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle {
+      font-family: var(--mono);
+      font-size: .78rem;
+      color: var(--muted);
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    /* ── Status Banner ──────────────────────────────────────────── */
+    .status-banner {
+      width: 100%;
+      max-width: 700px;
+      padding: 14px 24px;
+      border-radius: var(--radius);
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-align: center;
+      margin-bottom: 22px;
+      transition: all var(--transition);
+      border: 1.5px solid transparent;
+    }
+    .status-banner.safe {
+      background: rgba(0,230,118,0.08);
+      border-color: var(--safe);
+      color: var(--safe);
+      box-shadow: 0 0 24px var(--safe-glow);
+    }
+    .status-banner.fire {
+      background: rgba(255,61,0,0.12);
+      border-color: var(--fire);
+      color: var(--fire);
+      box-shadow: 0 0 32px var(--fire-glow);
+      animation: statusPulse 0.6s ease-in-out infinite;
+    }
+    @keyframes statusPulse {
+      0%,100% { box-shadow: 0 0 20px var(--fire-glow); }
+      50%      { box-shadow: 0 0 50px rgba(255,61,0,.55); }
+    }
+    .status-banner.idle {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--muted);
+    }
+
+    /* ── Main Card (camera) ─────────────────────────────────────── */
+    .camera-card {
+      width: 100%;
+      max-width: 700px;
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      margin-bottom: 22px;
+      position: relative;
+      box-shadow: 0 8px 40px rgba(0,0,0,.5);
+    }
+
+    /* corner brackets decoration */
+    .camera-card::before, .camera-card::after {
+      content:'';
+      position: absolute;
+      width: 28px; height: 28px;
+      border-color: var(--fire);
+      border-style: solid;
+      z-index: 10;
+      transition: border-color var(--transition);
+    }
+    .camera-card::before { top: 10px; left: 10px; border-width: 2px 0 0 2px; border-radius: 4px 0 0 0; }
+    .camera-card::after  { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; border-radius: 0 0 4px 0; }
+    .camera-card.safe-mode::before,
+    .camera-card.safe-mode::after { border-color: var(--safe); }
+
+    /* inner header bar */
+    .cam-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: .72rem;
+      color: var(--muted);
+    }
+    .cam-bar .rec-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .cam-bar .rec-dot.live {
+      background: var(--fire);
+      box-shadow: 0 0 8px var(--fire);
+      animation: blink 1s step-start infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* video / canvas wrapper */
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      background: #000;
+      aspect-ratio: 16/9;
+    }
+    video, canvas#overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    /* hidden canvas for pixel analysis */
+    #analyzeCanvas { display: none; }
+
+    /* placeholder when camera off */
+    .cam-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: .85rem;
+    }
+    .cam-placeholder .icon { font-size: 3rem; opacity: .4; }
+
+    /* heat bar */
+    .heat-bar-wrap {
+      padding: 12px 18px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    .heat-label {
+      font-family: var(--mono);
+      font-size: .7rem;
+      color: var(--muted);
+      letter-spacing: .14em;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .heat-track {
+      height: 8px;
+      background: var(--bg);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .heat-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #00e676, #ffcc00, #ff9100, #ff3d00);
+      transition: width 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    /* ── Controls ───────────────────────────────────────────────── */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      width: 100%;
+      max-width: 700px;
+      margin-bottom: 24px;
+    }
+    button {
+      font-family: var(--head);
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 13px 28px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      flex: 1 1 160px;
+      max-width: 210px;
+    }
+    #startBtn {
+      background: linear-gradient(135deg, #1a2e1a, #0d2b0d);
+      color: var(--safe);
+      border: 1.5px solid var(--safe);
+      box-shadow: 0 0 14px rgba(0,230,118,.12);
+    }
+    #startBtn:hover { background: rgba(0,230,118,.14); box-shadow: 0 0 24px rgba(0,230,118,.25); }
+
+    #stopAlarmBtn {
+      background: linear-gradient(135deg, #1f1218, #1a0a0a);
+      color: var(--fire);
+      border: 1.5px solid var(--fire);
+      box-shadow: 0 0 14px rgba(255,61,0,.12);
+    }
+    #stopAlarmBtn:hover { background: rgba(255,61,0,.14); box-shadow: 0 0 24px rgba(255,61,0,.3); }
+
+    #testAlarmBtn {
+      background: linear-gradient(135deg, #1a1500, #1a1000);
+      color: var(--orange);
+      border: 1.5px solid var(--orange);
+      box-shadow: 0 0 14px rgba(255,145,0,.12);
+    }
+    #testAlarmBtn:hover { background: rgba(255,145,0,.14); box-shadow: 0 0 24px rgba(255,145,0,.3); }
+
+    button:active { transform: scale(0.96); }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* ── Stats row ──────────────────────────────────────────────── */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+      max-width: 700px;
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      flex: 1 1 130px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+    }
+    .stat-card .label {
+      font-family: var(--mono);
+      font-size: .65rem;
+      color: var(--muted);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .stat-card .value {
+      font-family: var(--mono);
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .stat-card .value.hot { color: var(--fire); }
+    .stat-card .value.safe { color: var(--safe); }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ───────────────────────────────────────────────────── -->
+<header>
+  <div class="logo-row">
+    <span class="flame-icon">🔥</span>
+    <h1>Fire Detection Alert System</h1>
+    <span class="flame-icon">🔥</span>
+  </div>
+  <p class="subtitle">Real-time chromatic analysis · AI-assisted monitoring</p>
+</header>
+
+<!-- ── Status Banner ─────────────────────────────────────────────── -->
+<div class="status-banner idle" id="statusBanner">
+  📷 Camera Offline — Press "Start Camera" to Begin
+</div>
+
+<!-- ── Camera Card ───────────────────────────────────────────────── -->
+<div class="camera-card" id="cameraCard">
+  <div class="cam-bar">
+    <span><span class="rec-dot" id="recDot"></span><span id="recLabel">STANDBY</span></span>
+    <span id="fpsLabel">-- FPS</span>
+  </div>
+  <div class="video-wrapper">
+    <!-- Live webcam feed -->
+    <video id="video" autoplay muted playsinline></video>
+    <!-- Overlay canvas (visual heat highlights) -->
+    <canvas id="overlay"></canvas>
+    <!-- Placeholder shown when camera is off -->
+    <div class="cam-placeholder" id="placeholder">
+      <span class="icon">📵</span>
+      <span>No Camera Feed</span>
+    </div>
+  </div>
+  <!-- Heat intensity bar -->
+  <div class="heat-bar-wrap">
+    <div class="heat-label">
+      <span>FIRE INDEX</span>
+      <span id="heatPct">0%</span>
+    </div>
+    <div class="heat-track">
+      <div class="heat-fill" id="heatFill"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden canvas for pixel analysis -->
+<canvas id="analyzeCanvas"></canvas>
+
+<!-- ── Controls ─────────────────────────────────────────────────── -->
+<div class="controls">
+  <button id="startBtn">▶ Start Camera</button>
+  <button id="stopAlarmBtn" disabled>🔇 Stop Alarm</button>
+  <button id="testAlarmBtn">🔔 Test Alarm</button>
+</div>
+
+<!-- ── Stats Row ─────────────────────────────────────────────────── -->
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="label">Fire Pixels</div>
+    <div class="value" id="statFire">0%</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Threshold</div>
+    <div class="value">8%</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Status</div>
+    <div class="value" id="statStatus">OFFLINE</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Alerts</div>
+    <div class="value" id="statAlerts">0</div>
+  </div>
+</div>
+
+<!-- ── Audio: External MP3 alarm sound ──────────────────────────── -->
+<!-- Loops automatically when fire is detected -->
+<audio id="alarmAudio" src="https://file.garden/aZ6xaZGeFnWVniBV/Theaudio.mp3" loop preload="auto"></audio>
+
+<script>
+/* ================================================================
+   FIRE DETECTION ALERT SYSTEM — JavaScript
+   ================================================================ */
+
+/* ── Element References ─────────────────────────────────── */
+const video        = document.getElementById('video');
+const overlay      = document.getElementById('overlay');
+const analyzeCanvas= document.getElementById('analyzeCanvas');
+const placeholder  = document.getElementById('placeholder');
+const statusBanner = document.getElementById('statusBanner');
+const cameraCard   = document.getElementById('cameraCard');
+const heatFill     = document.getElementById('heatFill');
+const heatPct      = document.getElementById('heatPct');
+const recDot       = document.getElementById('recDot');
+const recLabel     = document.getElementById('recLabel');
+const fpsLabel     = document.getElementById('fpsLabel');
+const statFire     = document.getElementById('statFire');
+const statStatus   = document.getElementById('statStatus');
+const statAlerts   = document.getElementById('statAlerts');
+
+const startBtn     = document.getElementById('startBtn');
+const stopAlarmBtn = document.getElementById('stopAlarmBtn');
+const testAlarmBtn = document.getElementById('testAlarmBtn');
+
+/* ── State Variables ────────────────────────────────────── */
+let stream         = null;   // MediaStream from webcam
+let animFrame      = null;   // requestAnimationFrame handle
+let alarmPlaying   = false;  // is alarm currently active?
+let fireDetected   = false;  // current detection result
+let alertCount     = 0;      // total times fire was detected
+let lastFrameTime  = 0;      // for FPS calculation
+const alarmAudio   = document.getElementById('alarmAudio'); // MP3 alarm element
+
+/* ── Detection Threshold ────────────────────────────────── */
+const FIRE_THRESHOLD = 0.08; // 8 % of pixels must be "fire-colored"
+
+/* ── Alarm Control (MP3) ────────────────────────────────── */
+/**
+ * Plays the external MP3 alarm sound in a loop.
+ * Uses the HTML <audio> element with loop attribute.
+ */
+function startAlarm() {
+  if (alarmPlaying) return;
+  alarmPlaying = true;
+  alarmAudio.volume = 1.0;
+  alarmAudio.currentTime = 0;
+  alarmAudio.play().catch(err => console.warn('Audio play blocked:', err));
+}
+
+/**
+ * Stops and resets the alarm sound.
+ */
+function stopAlarm() {
+  if (!alarmPlaying) return;
+  alarmPlaying = false;
+  alarmAudio.pause();
+  alarmAudio.currentTime = 0;
+}
+
+/* ── UI State Helpers ───────────────────────────────────── */
+function setFireUI(detected) {
+  if (detected) {
+    statusBanner.className = 'status-banner fire';
+    statusBanner.textContent = '⚠ FIRE DETECTED – EVACUATE IMMEDIATELY';
+    cameraCard.classList.remove('safe-mode');
+    document.body.classList.add('alarm-active');
+    statStatus.textContent  = 'FIRE';
+    statStatus.className    = 'value hot';
+  } else {
+    statusBanner.className = 'status-banner safe';
+    statusBanner.textContent = '✅ No Fire Detected';
+    cameraCard.classList.add('safe-mode');
+    document.body.classList.remove('alarm-active');
+    statStatus.textContent = 'CLEAR';
+    statStatus.className   = 'value safe';
+  }
+}
+
+function setOfflineUI() {
+  statusBanner.className  = 'status-banner idle';
+  statusBanner.textContent= '📷 Camera Offline — Press "Start Camera" to Begin';
+  cameraCard.classList.remove('safe-mode');
+  document.body.classList.remove('alarm-active');
+  statStatus.textContent  = 'OFFLINE';
+  statStatus.className    = 'value';
+}
+
+/* ── Color Analysis ─────────────────────────────────────── */
+/**
+ * Determines whether a pixel (r,g,b) looks like fire/flame.
+ * Fire colors are characterised by:
+ *   - High red channel
+ *   - Medium-to-high green channel (orange/yellow component)
+ *   - Low blue channel
+ */
+function isFirePixel(r, g, b) {
+  return (
+    r > 190 &&       // strong red
+    g > 60  &&       // some green (orange / yellow range)
+    g < 200 &&       // but not too green (avoids white)
+    b < 80  &&       // very little blue
+    r > g + 40       // red dominates green
+  );
+}
+
+/**
+ * Analyse a single video frame on the hidden canvas.
+ * Returns the fraction of pixels that are fire-colored (0..1).
+ */
+function analyzeFrame() {
+  const ctx   = analyzeCanvas.getContext('2d');
+  const w     = analyzeCanvas.width;
+  const h     = analyzeCanvas.height;
+  ctx.drawImage(video, 0, 0, w, h);
+
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const data      = imageData.data;
+  let firePixels  = 0;
+  const total     = w * h;
+
+  for (let i = 0; i < data.length; i += 4) {
+    if (isFirePixel(data[i], data[i+1], data[i+2])) {
+      firePixels++;
+      // Optionally tint fire pixels for overlay — store position
+    }
+  }
+  return firePixels / total;
+}
+
+/**
+ * Draw a heat-highlight overlay on the visible canvas.
+ * Paints semi-transparent red over pixels that look like fire.
+ */
+function drawOverlay() {
+  const ctx  = overlay.getContext('2d');
+  const w    = overlay.width;
+  const h    = overlay.height;
+  const ac   = analyzeCanvas.getContext('2d');
+  const data = ac.getImageData(0, 0, analyzeCanvas.width, analyzeCanvas.height).data;
+  const scaleX = w / analyzeCanvas.width;
+  const scaleY = h / analyzeCanvas.height;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Draw fire highlights
+  const aw = analyzeCanvas.width;
+  for (let i = 0; i < data.length; i += 4) {
+    if (isFirePixel(data[i], data[i+1], data[i+2])) {
+      const px = (i/4) % aw;
+      const py = Math.floor((i/4) / aw);
+      ctx.fillStyle = 'rgba(255,80,0,0.35)';
+      ctx.fillRect(px * scaleX, py * scaleY, scaleX + 1, scaleY + 1);
+    }
+  }
+}
+
+/* ── Main Detection Loop ────────────────────────────────── */
+
+function detectionLoop(timestamp) {
+  // FPS counter
+  if (lastFrameTime) {
+    const fps = Math.round(1000 / (timestamp - lastFrameTime));
+    fpsLabel.textContent = fps + ' FPS';
+  }
+  lastFrameTime = timestamp;
+
+  // Only process if video is playing
+  if (video.readyState >= 2) {
+    const ratio = analyzeFrame();
+    const pct   = Math.min(ratio * 100, 100).toFixed(1);
+
+    // Update heat bar
+    heatFill.style.width = Math.min(ratio / FIRE_THRESHOLD * 100, 100) + '%';
+    heatPct.textContent  = pct + '%';
+    statFire.textContent = pct + '%';
+    statFire.className   = ratio >= FIRE_THRESHOLD ? 'value hot' : 'value';
+
+    const nowFire = ratio >= FIRE_THRESHOLD;
+
+    if (nowFire && !fireDetected) {
+      // Transition to fire state
+      fireDetected = true;
+      alertCount++;
+      statAlerts.textContent = alertCount;
+      setFireUI(true);
+      stopAlarmBtn.disabled = false;
+    } else if (!nowFire && fireDetected) {
+      // Transition to safe state
+      fireDetected = false;
+      setFireUI(false);
+      stopAlarm();
+      stopAlarmBtn.disabled = true;
+    }
+
+    // Start alarm if fire detected and not already playing
+    if (fireDetected) {
+      if (!alarmPlaying) startAlarm();
+      drawOverlay();
+    } else {
+      overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
+    }
+  }
+
+  animFrame = requestAnimationFrame(detectionLoop);
+}
+
+/* ── Camera Control ─────────────────────────────────────── */
+startBtn.addEventListener('click', async () => {
+  // If already running, stop camera
+  if (stream) {
+    stopCamera();
+    return;
+  }
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    video.srcObject = stream;
+    placeholder.style.display = 'none';
+
+    video.addEventListener('loadedmetadata', () => {
+      // Match analysis canvas to a small resolution for performance
+      analyzeCanvas.width  = 160;
+      analyzeCanvas.height = 90;
+      // Match overlay canvas to display size
+      overlay.width  = video.videoWidth  || 640;
+      overlay.height = video.videoHeight || 360;
+    });
+
+    recDot.classList.add('live');
+    recLabel.textContent = 'LIVE';
+    statusBanner.className  = 'status-banner safe';
+    statusBanner.textContent= '✅ No Fire Detected';
+    statStatus.textContent  = 'CLEAR';
+    statStatus.className    = 'value safe';
+    startBtn.textContent    = '⏹ Stop Camera';
+
+    animFrame = requestAnimationFrame(detectionLoop);
+  } catch (err) {
+    statusBanner.className  = 'status-banner idle';
+    statusBanner.textContent= '❌ Camera Access Denied: ' + err.message;
+    console.error('Camera error:', err);
+  }
+});
+
+function stopCamera() {
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+  video.srcObject    = null;
+  placeholder.style.display = 'flex';
+  if (animFrame) cancelAnimationFrame(animFrame);
+  fireDetected = false;
+  stopAlarm();
+  recDot.classList.remove('live');
+  recLabel.textContent    = 'STANDBY';
+  fpsLabel.textContent    = '-- FPS';
+  heatFill.style.width    = '0%';
+  heatPct.textContent     = '0%';
+  statFire.textContent    = '0%';
+  startBtn.textContent    = '▶ Start Camera';
+  stopAlarmBtn.disabled   = true;
+  setOfflineUI();
+  overlay.getContext('2d').clearRect(0,0,overlay.width,overlay.height);
+}
+
+/* ── Stop Alarm Button ──────────────────────────────────── */
+stopAlarmBtn.addEventListener('click', () => {
+  stopAlarm();
+  stopAlarmBtn.disabled = true;
+  // Visual override — suppress flashing briefly
+  document.body.classList.remove('alarm-active');
+});
+
+/* ── Test Alarm Button ──────────────────────────────────── */
+testAlarmBtn.addEventListener('click', () => {
+  alertCount++;
+  statAlerts.textContent = alertCount;
+  setFireUI(true);
+  stopAlarmBtn.disabled = false;
+  startAlarm();
+  lastAlarmStart = 0;
+
+  // Auto-reset after 4 seconds if no real fire detected
+  setTimeout(() => {
+    if (!fireDetected) {
+      stopAlarm();
+      stopAlarmBtn.disabled = true;
+      if (stream) {
+        setFireUI(false);
+      } else {
+        setOfflineUI();
+      }
+    }
+  }, 4000);
+});
+</script>
+</body>
+</html>
