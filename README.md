@@ -5,7 +5,7 @@ The Fire Alarm System is a safety monitoring application designed to detect pote
 The main purpose of this project is to provide early fire detection and warning, helping to protect lives, buildings, and valuable assets.
 
 
-'''
+```
 fire-alarm-system
 │
 ├── frontend
@@ -21,4 +21,4 @@ fire-alarm-system
 │   └── fire_logs.db
 │
 └── README.md
-'''
+```
